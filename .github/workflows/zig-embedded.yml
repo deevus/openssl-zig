@@ -20,6 +20,8 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
       - name: Build Summary ${{ matrix.targets }}
         run: zig build --summary all -freference-trace -Dtarget=${{ matrix.targets }}
+      - name: Build Summary - Zig Package ${{ matrix.targets }}
+        run: zig build --build-file $PWD/test_zigpkg/build.zig --summary all -freference-trace -Dtarget=${{ matrix.targets }}

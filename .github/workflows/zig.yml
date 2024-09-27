@@ -14,7 +14,9 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
       
       - name: Build Summary
         run: zig build --summary all -freference-trace
+      - name: Build Summary - Zig Package
+        run: zig build --build-file $PWD/test_zigpkg/build.zig --summary all -freference-trace
