@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2020-2025 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -141,7 +141,6 @@ typedef struct {
 
     /* The Algorithm Identifier of the signature algorithm */
     unsigned char aid_buf[OSSL_MAX_ALGORITHM_ID_SIZE];
-    unsigned char *aid;
     size_t  aid_len;
 
     /* id indicating the EdDSA instance */
@@ -234,6 +233,7 @@ static int eddsa_signverify_init(void *vpeddsactx, void *vedkey)
     ECX_KEY *edkey = (ECX_KEY *)vedkey;
     WPACKET pkt;
     int ret;
+    unsigned char *aid = NULL;
 
     if (!ossl_prov_is_running())
         return 0;
@@ -277,13 +277,16 @@ static int eddsa_signverify_init(void *vpeddsactx, void *vedkey)
         ERR_raise(ERR_LIB_PROV, ERR_R_INTERNAL_ERROR);
         ossl_ecx_key_free(edkey);
         peddsactx->key = NULL;
+        WPACKET_cleanup(&pkt);
         return 0;
     }
     if (ret && WPACKET_finish(&pkt)) {
         WPACKET_get_total_written(&pkt, &peddsactx->aid_len);
-        peddsactx->aid = WPACKET_get_curr(&pkt);
+        aid = WPACKET_get_curr(&pkt);
     }
     WPACKET_cleanup(&pkt);
+    if (aid != NULL && peddsactx->aid_len != 0)
+        memmove(peddsactx->aid_buf, aid, peddsactx->aid_len);
 
     return 1;
 }
@@ -795,8 +798,10 @@ static int eddsa_get_ctx_params(void *vpeddsactx, OSSL_PARAM *params)
         return 0;
 
     p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
-    if (p != NULL && !OSSL_PARAM_set_octet_string(p, peddsactx->aid,
-                                                  peddsactx->aid_len))
+    if (p != NULL
+        && !OSSL_PARAM_set_octet_string(p,
+                                        peddsactx->aid_len == 0 ? NULL : peddsactx->aid_buf,
+                                        peddsactx->aid_len))
         return 0;
 
     return 1;
@@ -822,7 +827,7 @@ static int eddsa_set_ctx_params(void *vpeddsactx, const OSSL_PARAM params[])
 
     if (peddsactx == NULL)
         return 0;
-    if (params == NULL)
+    if (ossl_param_is_empty(params))
         return 1;
 
     p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_INSTANCE);

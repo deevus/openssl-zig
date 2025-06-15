@@ -427,7 +427,7 @@ in delta CRLs which are not currently implemented.
 
 This sets the CRL revocation reason code to B<certificateHold> and the hold
 instruction to I<instruction> which must be an OID. Although any OID can be
-used only B<holdInstructionNone> (the use of which is discouraged by RFC2459)
+used, only B<holdInstructionNone> (the use of which is deprecated in RFC 5280),
 B<holdInstructionCallIssuer> or B<holdInstructionReject> will normally be used.
 
 =item B<-crl_compromise> I<time>
@@ -723,7 +723,7 @@ A sample configuration file with the relevant sections for this command:
 
  default_days   = 365                   # how long to certify for
  default_crl_days= 30                   # how long before next CRL
- default_md     = md5                   # md to use
+ default_md     = sha256                # md to use
 
  policy         = policy_any            # default policy
  email_in_dn    = no                    # Don't add the email into cert DN

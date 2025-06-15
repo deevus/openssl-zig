@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2024 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2025 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -259,7 +259,7 @@ int BIO_get_accept_socket(char *host, int bind_mode)
         return INVALID_SOCKET;
 
     if (BIO_sock_init() != 1)
-        return INVALID_SOCKET;
+        goto err;
 
     if (BIO_lookup(h, p, BIO_LOOKUP_SERVER, AF_UNSPEC, SOCK_STREAM, &res) != 0)
         goto err;
@@ -430,15 +430,16 @@ int BIO_sock_info(int sock,
  */
 int BIO_socket_wait(int fd, int for_read, time_t max_time)
 {
+# if defined(OPENSSL_SYS_WINDOWS) || !defined(POLLIN)
     fd_set confds;
     struct timeval tv;
     time_t now;
 
-#ifdef _WIN32
+#  ifdef _WIN32
     if ((SOCKET)fd == INVALID_SOCKET)
-#else
+#  else
     if (fd < 0 || fd >= FD_SETSIZE)
-#endif
+#  endif
         return -1;
     if (max_time == 0)
         return 1;
@@ -453,5 +454,22 @@ int BIO_socket_wait(int fd, int for_read, time_t max_time)
     tv.tv_sec = (long)(max_time - now); /* might overflow */
     return select(fd + 1, for_read ? &confds : NULL,
                   for_read ? NULL : &confds, NULL, &tv);
+# else
+    struct pollfd confds;
+    time_t now;
+
+    if (fd < 0)
+        return -1;
+    if (max_time == 0)
+        return 1;
+
+    now = time(NULL);
+    if (max_time < now)
+        return 0;
+
+    confds.fd = fd;
+    confds.events = for_read ? POLLIN : POLLOUT;
+    return poll(&confds, 1, (int)(max_time - now) * 1000);
+# endif
 }
 #endif /* !defined(OPENSSL_NO_SOCK) */

@@ -95,7 +95,6 @@ typedef struct {
 
     /* The Algorithm Identifier of the combined signature algorithm */
     unsigned char aid_buf[OSSL_MAX_ALGORITHM_ID_SIZE];
-    unsigned char *aid;
     size_t  aid_len;
 
     /* main digest */
@@ -172,6 +171,7 @@ static int ecdsa_setup_md(PROV_ECDSA_CTX *ctx,
     size_t mdname_len;
     int md_nid, md_size;
     WPACKET pkt;
+    unsigned char *aid = NULL;
 
     if (mdname == NULL)
         return 1;
@@ -197,11 +197,13 @@ static int ecdsa_setup_md(PROV_ECDSA_CTX *ctx,
         goto err;
     }
     md_nid = ossl_digest_get_approved_nid(md);
+#ifdef FIPS_MODULE
     if (md_nid == NID_undef) {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_DIGEST_NOT_ALLOWED,
                        "digest=%s", mdname);
         goto err;
     }
+#endif
     /* XOF digests don't work */
     if (EVP_MD_xof(md)) {
         ERR_raise(ERR_LIB_PROV, PROV_R_XOF_DIGESTS_NOT_ALLOWED);
@@ -237,14 +239,23 @@ static int ecdsa_setup_md(PROV_ECDSA_CTX *ctx,
     EVP_MD_free(ctx->md);
 
     ctx->aid_len = 0;
-    if (WPACKET_init_der(&pkt, ctx->aid_buf, sizeof(ctx->aid_buf))
-        && ossl_DER_w_algorithmIdentifier_ECDSA_with_MD(&pkt, -1, ctx->ec,
-                                                        md_nid)
-        && WPACKET_finish(&pkt)) {
-        WPACKET_get_total_written(&pkt, &ctx->aid_len);
-        ctx->aid = WPACKET_get_curr(&pkt);
+#ifndef FIPS_MODULE
+    if (md_nid != NID_undef) {
+#else
+    {
+#endif
+        if (WPACKET_init_der(&pkt, ctx->aid_buf, sizeof(ctx->aid_buf))
+            && ossl_DER_w_algorithmIdentifier_ECDSA_with_MD(&pkt, -1, ctx->ec,
+                                                            md_nid)
+            && WPACKET_finish(&pkt)) {
+            WPACKET_get_total_written(&pkt, &ctx->aid_len);
+            aid = WPACKET_get_curr(&pkt);
+        }
+        WPACKET_cleanup(&pkt);
+        if (aid != NULL && ctx->aid_len != 0)
+            memmove(ctx->aid_buf, aid, ctx->aid_len);
     }
-    WPACKET_cleanup(&pkt);
+
     ctx->mdctx = NULL;
     ctx->md = md;
     ctx->mdsize = (size_t)md_size;
@@ -670,7 +681,9 @@ static int ecdsa_get_ctx_params(void *vctx, OSSL_PARAM *params)
         return 0;
 
     p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_ALGORITHM_ID);
-    if (p != NULL && !OSSL_PARAM_set_octet_string(p, ctx->aid, ctx->aid_len))
+    if (p != NULL && !OSSL_PARAM_set_octet_string(p,
+                                                  ctx->aid_len == 0 ? NULL : ctx->aid_buf,
+                                                  ctx->aid_len))
         return 0;
 
     p = OSSL_PARAM_locate(params, OSSL_SIGNATURE_PARAM_DIGEST_SIZE);
@@ -716,16 +729,15 @@ static const OSSL_PARAM *ecdsa_gettable_ctx_params(ossl_unused void *vctx,
     return known_gettable_ctx_params;
 }
 
-/* The common params for ecdsa_set_ctx_params and ecdsa_sigalg_set_ctx_params */
+/**
+ * @brief Set up common params for ecdsa_set_ctx_params and
+ * ecdsa_sigalg_set_ctx_params. The caller is responsible for checking |vctx| is
+ * not NULL and |params| is not empty.
+ */
 static int ecdsa_common_set_ctx_params(void *vctx, const OSSL_PARAM params[])
 {
     PROV_ECDSA_CTX *ctx = (PROV_ECDSA_CTX *)vctx;
     const OSSL_PARAM *p;
-
-    if (ctx == NULL)
-        return 0;
-    if (params == NULL)
-        return 1;
 
     if (!OSSL_FIPS_IND_SET_CTX_PARAM(ctx, OSSL_FIPS_IND_SETTABLE0, params,
                                      OSSL_SIGNATURE_PARAM_FIPS_KEY_CHECK))
@@ -761,11 +773,13 @@ static int ecdsa_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     size_t mdsize = 0;
     int ret;
 
+    if (ctx == NULL)
+        return 0;
+    if (ossl_param_is_empty(params))
+        return 1;
+
     if ((ret = ecdsa_common_set_ctx_params(ctx, params)) <= 0)
         return ret;
-
-    if (params == NULL)
-        return 1;
 
     p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_DIGEST);
     if (p != NULL) {
@@ -965,11 +979,13 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     const OSSL_PARAM *p;
     int ret;
 
+    if (ctx == NULL)
+        return 0;
+    if (ossl_param_is_empty(params))
+        return 1;
+
     if ((ret = ecdsa_common_set_ctx_params(ctx, params)) <= 0)
         return ret;
-
-    if (params == NULL)
-        return 1;
 
     if (ctx->operation == EVP_PKEY_OP_VERIFYMSG) {
         p = OSSL_PARAM_locate_const(params, OSSL_SIGNATURE_PARAM_SIGNATURE);
@@ -997,11 +1013,11 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     ecdsa_##md##_sign_init(void *vctx, void *vec,                       \
                          const OSSL_PARAM params[])                     \
     {                                                                   \
-        static const char desc[] = "ECDSA-" #MD " Sign Init";           \
+        static const char desc[] = "ECDSA-" MD " Sign Init";           \
                                                                         \
         return ecdsa_sigalg_signverify_init(vctx, vec,                  \
                                             ecdsa_sigalg_set_ctx_params, \
-                                            params, #MD,                \
+                                            params, MD,                \
                                             EVP_PKEY_OP_SIGN,           \
                                             desc);                      \
     }                                                                   \
@@ -1010,11 +1026,11 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     ecdsa_##md##_sign_message_init(void *vctx, void *vec,               \
                                    const OSSL_PARAM params[])           \
     {                                                                   \
-        static const char desc[] = "ECDSA-" #MD " Sign Message Init";   \
+        static const char desc[] = "ECDSA-" MD " Sign Message Init";   \
                                                                         \
         return ecdsa_sigalg_signverify_init(vctx, vec,                  \
                                             ecdsa_sigalg_set_ctx_params, \
-                                            params, #MD,                \
+                                            params, MD,                \
                                             EVP_PKEY_OP_SIGNMSG,        \
                                             desc);                      \
     }                                                                   \
@@ -1023,11 +1039,11 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     ecdsa_##md##_verify_init(void *vctx, void *vec,                     \
                            const OSSL_PARAM params[])                   \
     {                                                                   \
-        static const char desc[] = "ECDSA-" #MD " Verify Init";         \
+        static const char desc[] = "ECDSA-" MD " Verify Init";         \
                                                                         \
         return ecdsa_sigalg_signverify_init(vctx, vec,                  \
                                             ecdsa_sigalg_set_ctx_params, \
-                                            params, #MD,                \
+                                            params, MD,                \
                                             EVP_PKEY_OP_VERIFY,         \
                                             desc);                      \
     }                                                                   \
@@ -1036,11 +1052,11 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
     ecdsa_##md##_verify_message_init(void *vctx, void *vec,             \
                                      const OSSL_PARAM params[])         \
     {                                                                   \
-        static const char desc[] = "ECDSA-" #MD " Verify Message Init"; \
+        static const char desc[] = "ECDSA-" MD " Verify Message Init"; \
                                                                         \
         return ecdsa_sigalg_signverify_init(vctx, vec,                  \
                                             ecdsa_sigalg_set_ctx_params, \
-                                            params, #MD,                \
+                                            params, MD,                \
                                             EVP_PKEY_OP_VERIFYMSG,      \
                                             desc);                      \
     }                                                                   \
@@ -1081,12 +1097,12 @@ static int ecdsa_sigalg_set_ctx_params(void *vctx, const OSSL_PARAM params[])
         OSSL_DISPATCH_END                                               \
     }
 
-IMPL_ECDSA_SIGALG(sha1, SHA1);
-IMPL_ECDSA_SIGALG(sha224, SHA2-224);
-IMPL_ECDSA_SIGALG(sha256, SHA2-256);
-IMPL_ECDSA_SIGALG(sha384, SHA2-384);
-IMPL_ECDSA_SIGALG(sha512, SHA2-512);
-IMPL_ECDSA_SIGALG(sha3_224, SHA3-224);
-IMPL_ECDSA_SIGALG(sha3_256, SHA3-256);
-IMPL_ECDSA_SIGALG(sha3_384, SHA3-384);
-IMPL_ECDSA_SIGALG(sha3_512, SHA3-512);
+IMPL_ECDSA_SIGALG(sha1, "SHA1");
+IMPL_ECDSA_SIGALG(sha224, "SHA2-224");
+IMPL_ECDSA_SIGALG(sha256, "SHA2-256");
+IMPL_ECDSA_SIGALG(sha384, "SHA2-384");
+IMPL_ECDSA_SIGALG(sha512, "SHA2-512");
+IMPL_ECDSA_SIGALG(sha3_224, "SHA3-224");
+IMPL_ECDSA_SIGALG(sha3_256, "SHA3-256");
+IMPL_ECDSA_SIGALG(sha3_384, "SHA3-384");
+IMPL_ECDSA_SIGALG(sha3_512, "SHA3-512");

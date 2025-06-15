@@ -158,7 +158,7 @@ static int test_rng_reseed(ossl_unused void *vtest,
 
 static size_t test_rng_nonce(void *vtest, unsigned char *out,
                              unsigned int strength, size_t min_noncelen,
-                             ossl_unused size_t max_noncelen)
+                             size_t max_noncelen)
 {
     PROV_TEST_RNG *t = (PROV_TEST_RNG *)vtest;
     size_t i;
@@ -174,9 +174,10 @@ static size_t test_rng_nonce(void *vtest, unsigned char *out,
 
     if (t->nonce == NULL)
         return 0;
+    i = t->nonce_len > max_noncelen ? max_noncelen : t->nonce_len;
     if (out != NULL)
-        memcpy(out, t->nonce, t->nonce_len);
-    return t->nonce_len;
+        memcpy(out, t->nonce, i);
+    return i;
 }
 
 static int test_rng_get_ctx_params(void *vtest, OSSL_PARAM params[])
@@ -229,7 +230,7 @@ static int test_rng_set_ctx_params(void *vtest, const OSSL_PARAM params[])
     void *ptr = NULL;
     size_t size = 0;
 
-    if (params == NULL)
+    if (ossl_param_is_empty(params))
         return 1;
 
     p = OSSL_PARAM_locate_const(params, OSSL_RAND_PARAM_STRENGTH);
