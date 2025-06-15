@@ -44,6 +44,7 @@ fn libcrypto(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     lib.root_module.addCMacro("OPENSSL_NO_THREAD_POOL", "");
     lib.root_module.addCMacro("OPENSSL_NO_STDIO", "");
     lib.root_module.addCMacro("OPENSSL_NO_JITTER", "");
+    lib.root_module.addCMacro("OPENSSLDIR", "\"/usr/local/ssl\"");
     lib.root_module.addCMacro("OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ", "1");
     if (lib.rootModuleTarget().isMinGW())
         lib.root_module.addCMacro("NOCRYPT", "1");
@@ -913,7 +914,6 @@ fn libssl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
     lib.root_module.addCMacro("OPENSSL_NO_KTLS", "");
     lib.root_module.addCMacro("OPENSSL_NO_QUIC", "");
     lib.root_module.addCMacro("OPENSSL_NO_QLOG", "");
-    lib.root_module.addCMacro("OSSL_LIBSSL_RECORD_LAYER_PARAM_HS_PADDING", "");
     if (lib.rootModuleTarget().isMinGW())
         lib.root_module.addCMacro("NOCRYPT", "1");
     lib.root_module.addCSourceFiles(.{
@@ -973,7 +973,6 @@ fn libssl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
             "ssl/ssl_cert_comp.c",
             "ssl/ssl_ciph.c",
             "ssl/ssl_conf.c",
-            "ssl/ssl_err.c",
             "ssl/ssl_err_legacy.c",
             "ssl/ssl_init.c",
             // "ssl/ssl_lib.c",
@@ -1028,7 +1027,6 @@ fn libprovider(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
     lib.root_module.addCMacro("OPENSSL_NO_KTLS", "");
     lib.root_module.addCMacro("OPENSSL_NO_QUIC", "");
     lib.root_module.addCMacro("OPENSSL_CPUID_OBJ", "");
-    lib.root_module.addCMacro("OSSL_RAND_PARAM_GENERATE", "");
     if (lib.rootModuleTarget().os.tag.isDarwin()) {
         // CommonCrypto
         lib.root_module.linkFramework("CoreServices", .{});
@@ -1119,7 +1117,6 @@ fn libprovider(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
             "providers/implementations/ciphers/cipher_cast5_hw.c",
             "providers/implementations/ciphers/cipher_chacha20.c",
             "providers/implementations/ciphers/cipher_chacha20_hw.c",
-            "providers/implementations/ciphers/cipher_chacha20_poly1305.c",
             "providers/implementations/ciphers/cipher_chacha20_poly1305_hw.c",
             "providers/implementations/ciphers/cipher_cts.c",
             "providers/implementations/ciphers/cipher_des.c",
@@ -1154,7 +1151,6 @@ fn libprovider(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
             "providers/implementations/ciphers/cipher_tdes_hw.c",
             "providers/implementations/ciphers/cipher_tdes_wrap.c",
             "providers/implementations/ciphers/cipher_tdes_wrap_hw.c",
-            "providers/implementations/ciphers/ciphercommon.c",
             "providers/implementations/ciphers/ciphercommon_block.c",
             "providers/implementations/ciphers/ciphercommon_ccm.c",
             "providers/implementations/ciphers/ciphercommon_ccm_hw.c",
