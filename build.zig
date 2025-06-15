@@ -73,7 +73,9 @@ fn libcrypto(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
                 "crypto/bn/bn_sparc.c",
                 "crypto/sparcv9cap.c",
             },
-            else => &.{},
+            else => &.{
+                "crypto/cpuid.c",
+            },
         },
         .flags = &.{
             "-std=gnu99",
@@ -314,7 +316,6 @@ fn libcrypto(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             "crypto/core_fetch.c",
             "crypto/core_namemap.c",
             "crypto/cpt_err.c",
-            "crypto/cpuid.c",
             "crypto/crmf/crmf_asn.c",
             "crypto/crmf/crmf_err.c",
             "crypto/crmf/crmf_lib.c",
